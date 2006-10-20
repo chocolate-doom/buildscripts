@@ -1,0 +1,246 @@
+#!/bin/sh
+#
+# Build script to automatically build Chocolate Doom.  This will work
+# on OSX and Linux, and hopefully Cygwin as well (havent tried)
+#
+# To build on OSX:
+#  1. Install Xcode (available on your OSX DVDs or from the Apple
+#     website)
+#  2. Type:
+#       curl http://www.chocolate-doom.org/build-chocolate-doom | sh
+#
+# To build on Linux:
+#  1. Make sure gcc is installed (depends on your distribution).
+#  2. Type:
+#       wget -O - http://www.chocolate-doom.org/build-chocolate-doom | sh
+#
+
+CHOCOLATE_DOOM_DIR=~/chocolate-doom
+PACKAGES_DIR=$CHOCOLATE_DOOM_DIR/packages
+BUILD_DIR=$CHOCOLATE_DOOM_DIR/build
+
+# Determine if a given program is in the PATH.
+
+function have_tool() {
+    tool=$1
+
+        result=1
+    SAVE_IFS=$IFS
+    IFS=:
+
+    for dir in $PATH; do
+        if [ -e $dir/$tool ]; then
+            echo $dir/$tool
+                        result=0
+            break
+        fi
+    done
+
+    IFS=$SAVE_IFS
+
+    return $result
+}
+
+# Download a given URL to stdout.
+
+function get_url() {
+    url=$1
+
+    if [ `have_tool curl` ]; then
+        curl $url
+        return
+    fi
+
+    if [ `have_tool wget` ]; then
+        wget $url -O -
+        return
+    fi
+
+    echo No tool available to retrieve URLs.  Please install curl or wget. >2
+    exit
+}
+
+# Extract a tar.gz file.
+
+function extract_targz() {
+    file=$1
+
+    gunzip < $1 | tar -x
+}
+
+# Download a file to the packages directory.
+
+function download_file() {
+    url=$1
+    file=$2
+
+    if get_url $url$file > $PACKAGES_DIR/$file.part; then
+        mv $PACKAGES_DIR/$file.part $PACKAGES_DIR/$file
+        return 0
+    else
+        echo "File $file failed to download! Please try again."
+        return 1
+    fi
+}
+
+# build_module(base_url, module_name, version, args)
+# Build a module, downloading from http:
+
+function build_module() {
+    url=$1
+    module=$2
+    version=$3
+    args=$4
+
+    echo =======================================================
+    echo Building $module version $version
+    echo =======================================================
+    echo
+
+    if [ ! -e $PACKAGES_DIR/$module-$version.tar.gz ]; then
+        echo Downloading tar file...
+        download_file $url $module-$version.tar.gz
+    fi
+
+    echo Extracting...
+    cd $BUILD_DIR
+
+    if ! extract_targz $PACKAGES_DIR/$module-$version.tar.gz; then
+        rm -f $PACKAGES_DIR/$module-$version.tar.gz
+
+        echo Archive failed to extract and is possibly corrupted.
+        echo Please run this script again.
+        exit
+    fi
+
+    echo Building module...
+    cd $BUILD_DIR/$module-$version
+    (./configure --with-sdl-prefix=$SDL_PREFIX --prefix=$INSTALL_DIR $args) || exit
+    make || exit
+
+    # Install the package
+    echo $INSTALL_MESSAGE
+    $INSTALL_COMMAND make install || exit
+
+    echo Build complete.
+    echo 
+}
+
+# Check if a given header file is in the standard include directory or
+# SDL include directory.
+
+function check_header() {
+    headerfile=$1
+
+    echo "#include <$headerfile>" | cpp $SDL_CFLAGS $CFLAGS > /dev/null
+
+    result=$?
+
+    if [ $result == 0 ]; then
+        echo "Have $headerfile"
+    else
+        echo "Don't have $headerfile"
+    fi
+    
+    return $result
+}
+
+function usage() {
+    echo "Usage:"
+    echo "$0       : Install into home directory"
+    echo "$0 -su   : Install globally onto system using 'su'"
+    echo "$0 -sudo : Install globally onto system using 'sudo'"
+    exit 0
+}
+
+if ! have_tool gcc > /dev/null; then
+    echo "No compiler found.  Please install gcc!" >&2
+    exit -1
+fi
+
+# Decide on how to install things
+
+case "$1" in
+    "-su")
+        INSTALL_DIR=/usr/local
+        INSTALL_COMMAND=su -c 
+        INSTALL_MESSAGE="Type the root password:"
+        ;;
+    "-sudo")
+        INSTALL_DIR=/usr/local
+        INSTALL_COMMAND=sudo 
+        INSTALL_MESSAGE="Type your password:"
+        ;;
+    "")
+        INSTALL_DIR=$CHOCOLATE_DOOM_DIR/install
+        INSTALL_COMMAND=
+        INSTALL_MESSAGE="Installing..."
+        ;;
+    *)
+        usage
+        ;;
+esac
+
+# Make all our build directories etc
+
+mkdir $CHOCOLATE_DOOM_DIR
+mkdir $PACKAGES_DIR
+mkdir $BUILD_DIR
+
+export CFLAGS="-I$INSTALL_DIR/include/SDL $CFLAGS"
+export LDFLAGS="-L$INSTALL_DIR/lib $LDFLAGS"
+
+SDL_BUILD_OPTIONS=""
+
+if [ `uname` = "Darwin" ]; then
+    SDL_BUILD_OPTIONS="--disable-video-x11 $SDL_BUILD_OPTIONS"
+
+    # MacOS needs the latest version of SDL_mixer: older versions have 
+    # compile problems
+
+    SDL_MIXER_VERSION=1.2.7
+else
+    export LDFLAGS="-Wl,-rpath -Wl,$INSTALL_DIR/lib $LDFLAGS"
+    SDL_MIXER_VERSION=1.2.6
+fi
+
+SDL_CFLAGS=
+SDL_PREFIX=`sdl-config --prefix`
+
+if [ $? == 0 ]; then
+    # SDL is installed on the system
+
+    SDL_CFLAGS=`sdl-config --cflags`
+else
+    # SDL not installed; we must build it
+
+    SDL_PREFIX=$INSTALL_DIR
+
+    build_module http://www.libsdl.org/release/ SDL 1.2.11 "$SDL_BUILD_OPTIONS"
+fi
+
+if ! check_header SDL_net.h; then
+
+    # SDL_net not installed; we must build it
+
+    build_module http://www.libsdl.org/projects/SDL_net/release/ SDL_net 1.2.6 ""
+fi
+
+if ! check_header SDL_mixer.h; then
+
+    # SDL_mixer not installed; we must build it
+
+    build_module http://www.libsdl.org/projects/SDL_mixer/release/ SDL_mixer $SDL_MIXER_VERSION ""
+fi
+
+# There is not yet a version of chocolate doom on sourceforge that runs on
+# os x
+#build_module http://dl.sourceforge.net/sourceforge/chocolate-doom/ chocolate-doom 0.1.4 ""
+
+build_module http://www.soulsphere.org/ chocolate-doom 0.2.0 ""
+
+cd $CHOCOLATE_DOOM_DIR
+ln -sf $INSTALL_DIR/games/chocolate-doom chocolate-doom
+ln -sf $INSTALL_DIR/games/chocolate-server chocolate-server
+ln -sf $INSTALL_DIR/games/chocolate-setup chocolate-setup
+
