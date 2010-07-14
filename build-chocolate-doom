@@ -175,12 +175,12 @@ autogen_module() {
     # commands are run here directly as some slight tweaks are needed.
 
     mkdir autotools
-    
-    aclocal -I "$INSTALL_DIR/share/aclocal"
-    autoheader
-    automake -a -c
-    autoconf
-    automake
+
+    aclocal -I "$SDL_PREFIX/share/aclocal" || exit
+    autoheader || exit
+    automake -a -c || exit
+    autoconf || exit
+    automake || exit
 }
 
 # Check if a given header file is in the standard include directory or
@@ -251,6 +251,7 @@ mkdir $PACKAGES_DIR
 mkdir $BUILD_DIR
 
 MACOSX_DEPLOYMENT_TARGET=10.4
+PATH="$INSTALL_DIR/bin:$PATH"
 CFLAGS="-I$INSTALL_DIR/include/SDL $CFLAGS"
 LDFLAGS="-L$INSTALL_DIR/lib $LDFLAGS"
 
