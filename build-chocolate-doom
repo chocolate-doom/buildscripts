@@ -21,17 +21,17 @@ BUILD_DIR=$CHOCOLATE_DOOM_DIR/build
 
 # Determine if a given program is in the PATH.
 
-function have_tool() {
+have_tool() {
     tool=$1
 
-        result=1
+    result=1
     SAVE_IFS=$IFS
     IFS=:
 
     for dir in $PATH; do
         if [ -e $dir/$tool ]; then
-            echo $dir/$tool
-                        result=0
+#            echo $dir/$tool
+            result=0
             break
         fi
     done
@@ -43,15 +43,15 @@ function have_tool() {
 
 # Download a given URL to stdout.
 
-function get_url() {
+get_url() {
     url=$1
 
-    if [ `have_tool curl` ]; then
+    if have_tool curl; then
         curl $url
         return
     fi
 
-    if [ `have_tool wget` ]; then
+    if have_tool wget; then
         wget $url -O -
         return
     fi
@@ -62,7 +62,7 @@ function get_url() {
 
 # Extract a tar.gz file.
 
-function extract_targz() {
+extract_targz() {
     file=$1
 
     gunzip < $1 | tar -x
@@ -70,7 +70,7 @@ function extract_targz() {
 
 # Download a file to the packages directory.
 
-function download_file() {
+download_file() {
     url=$1
     file=$2
 
@@ -83,14 +83,33 @@ function download_file() {
     fi
 }
 
-# build_module(base_url, module_name, version, args)
-# Build a module, downloading from http:
+# fetch_from_svn(svn_url, checkout_dir_name)
+# Check module out from subversion.
 
-function build_module() {
+fetch_from_svn() {
+    svn_url=$1
+    checkout_dir_name=$2
+
+    checkout_path="$BUILD_DIR/$checkout_dir_name"
+
+    if [ ! -e "$checkout_path" ]; then
+
+        if ! svn checkout "$svn_url" "$checkout_path"; then
+            echo "Failed to check out $checkout_dir_name from Subversion"
+            exit
+        fi
+    else
+        svn update "$checkout_path"
+    fi
+}
+
+# fetch_module(base_url, module_name, version)
+# Download the specified module.
+
+fetch_module() {
     url=$1
     module=$2
     version=$3
-    args=$4
 
     echo =======================================================
     echo Building $module version $version
@@ -112,9 +131,17 @@ function build_module() {
         echo Please run this script again.
         exit
     fi
+}
+
+# build_module(module_dir, args)
+# Build the specified module.
+
+build_module() {
+    module=$1
+    args=$2
 
     echo Building module...
-    cd $BUILD_DIR/$module-$version
+    cd "$BUILD_DIR/$module"
     (./configure --with-sdl-prefix=$SDL_PREFIX --prefix=$INSTALL_DIR $args) || exit
     make || exit
 
@@ -126,17 +153,47 @@ function build_module() {
     echo 
 }
 
+# fetch_and_build_module(base_url, module_name, version, args)
+# Build a module, downloading from http:
+
+fetch_and_build_module() {
+    url=$1
+    module=$2
+    version=$3
+    args=$4
+
+    fetch_module "$url" "$module" "$version"
+    build_module "$module-$version" "$args"
+}
+
+autogen_module() {
+    module=$1
+
+    cd "$BUILD_DIR/$module"
+
+    # This is what is normally found in the autogen.sh script.  The
+    # commands are run here directly as some slight tweaks are needed.
+
+    mkdir autotools
+    
+    aclocal -I "$INSTALL_DIR/share/aclocal"
+    autoheader
+    automake -a -c
+    autoconf
+    automake
+}
+
 # Check if a given header file is in the standard include directory or
 # SDL include directory.
 
-function check_header() {
+check_header() {
     headerfile=$1
 
     echo "#include <$headerfile>" | cpp $SDL_CFLAGS $CFLAGS > /dev/null
 
     result=$?
 
-    if [ $result == 0 ]; then
+    if [ $result = 0 ]; then
         echo "Have $headerfile"
     else
         echo "Don't have $headerfile"
@@ -145,7 +202,7 @@ function check_header() {
     return $result
 }
 
-function usage() {
+usage() {
     echo "Usage:"
     echo "$0       : Install into home directory"
     echo "$0 -su   : Install globally onto system using 'su'"
@@ -153,33 +210,39 @@ function usage() {
     exit 0
 }
 
-if ! have_tool gcc > /dev/null; then
+if ! have_tool gcc; then
     echo "No compiler found.  Please install gcc!" >&2
     exit -1
 fi
 
 # Decide on how to install things
 
-case "$1" in
-    "-su")
-        INSTALL_DIR=/usr/local
-        INSTALL_COMMAND=su -c 
-        INSTALL_MESSAGE="Type the root password:"
-        ;;
-    "-sudo")
-        INSTALL_DIR=/usr/local
-        INSTALL_COMMAND=sudo 
-        INSTALL_MESSAGE="Type your password:"
-        ;;
-    "")
-        INSTALL_DIR=$CHOCOLATE_DOOM_DIR/install
-        INSTALL_COMMAND=
-        INSTALL_MESSAGE="Installing..."
-        ;;
-    *)
-        usage
-        ;;
-esac
+svn_build=false
+INSTALL_DIR=$CHOCOLATE_DOOM_DIR/install
+INSTALL_COMMAND=
+INSTALL_MESSAGE="Installing..."
+
+for arg in "$@"; do
+    case "$1" in
+        "-su")
+            INSTALL_DIR=/usr/local
+            INSTALL_COMMAND=su -c 
+            INSTALL_MESSAGE="Type the root password:"
+            ;;
+        "-sudo")
+            INSTALL_DIR=/usr/local
+            INSTALL_COMMAND=sudo 
+            INSTALL_MESSAGE="Type your password:"
+            ;;
+        
+        "-svn")
+            svn_build=true
+            ;;
+        *)
+            usage
+            ;;
+    esac
+done
 
 # Make all our build directories etc
 
@@ -187,8 +250,13 @@ mkdir $CHOCOLATE_DOOM_DIR
 mkdir $PACKAGES_DIR
 mkdir $BUILD_DIR
 
-export CFLAGS="-I$INSTALL_DIR/include/SDL $CFLAGS"
-export LDFLAGS="-L$INSTALL_DIR/lib $LDFLAGS"
+MACOSX_DEPLOYMENT_TARGET=10.4
+CFLAGS="-I$INSTALL_DIR/include/SDL $CFLAGS"
+LDFLAGS="-L$INSTALL_DIR/lib $LDFLAGS"
+
+export MACOSX_DEPLOYMENT_TARGET
+export CFLAGS
+export LDFLAGS
 
 SDL_BUILD_OPTIONS=""
 
@@ -198,16 +266,16 @@ if [ `uname` = "Darwin" ]; then
     # MacOS needs the latest version of SDL_mixer: older versions have 
     # compile problems
 
-    SDL_MIXER_VERSION=1.2.7
+    SDL_MIXER_VERSION=1.2.11
 else
-    export LDFLAGS="-Wl,-rpath -Wl,$INSTALL_DIR/lib $LDFLAGS"
+    LDFLAGS="-Wl,-rpath -Wl,$INSTALL_DIR/lib $LDFLAGS"
     SDL_MIXER_VERSION=1.2.6
 fi
 
 SDL_CFLAGS=
 SDL_PREFIX=`sdl-config --prefix`
 
-if [ $? == 0 ]; then
+if [ $? = 0 ]; then
     # SDL is installed on the system
 
     SDL_CFLAGS=`sdl-config --cflags`
@@ -216,28 +284,37 @@ else
 
     SDL_PREFIX=$INSTALL_DIR
 
-    build_module http://www.libsdl.org/release/ SDL 1.2.11 "$SDL_BUILD_OPTIONS"
+    fetch_and_build_module http://www.libsdl.org/release/ SDL 1.2.14 "$SDL_BUILD_OPTIONS"
 fi
 
 if ! check_header SDL_net.h; then
 
     # SDL_net not installed; we must build it
 
-    build_module http://www.libsdl.org/projects/SDL_net/release/ SDL_net 1.2.6 ""
+    fetch_and_build_module http://www.libsdl.org/projects/SDL_net/release/ SDL_net 1.2.6 ""
 fi
 
 if ! check_header SDL_mixer.h; then
 
     # SDL_mixer not installed; we must build it
 
-    build_module http://www.libsdl.org/projects/SDL_mixer/release/ SDL_mixer $SDL_MIXER_VERSION ""
+    fetch_and_build_module http://www.libsdl.org/projects/SDL_mixer/release/ SDL_mixer $SDL_MIXER_VERSION ""
 fi
 
-# There is not yet a version of chocolate doom on sourceforge that runs on
-# os x
-#build_module http://dl.sourceforge.net/sourceforge/chocolate-doom/ chocolate-doom 0.1.4 ""
+# Build Chocolate Doom.  We can build the stable version or check out
+# the latest code from Subversion.
 
-build_module http://www.soulsphere.org/ chocolate-doom 0.2.0 ""
+if $svn_build; then
+    fetch_from_svn http://chocolate-doom.svn.sourceforge.net/svnroot/chocolate-doom/trunk/chocolate-doom chocolate-doom-svn
+
+    autogen_module chocolate-doom-svn
+
+    build_module chocolate-doom-svn ""
+else
+    # Build v1.4.0
+
+    fetch_and_build_module http://mesh.dl.sourceforge.net/project/chocolate-doom/chocolate-doom/1.4.0/ chocolate-doom 1.4.0 ""
+fi
 
 cd $CHOCOLATE_DOOM_DIR
 ln -sf $INSTALL_DIR/games/chocolate-doom chocolate-doom
