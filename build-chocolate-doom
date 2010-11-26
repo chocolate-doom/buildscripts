@@ -263,14 +263,8 @@ SDL_BUILD_OPTIONS=""
 
 if [ `uname` = "Darwin" ]; then
     SDL_BUILD_OPTIONS="--disable-video-x11 $SDL_BUILD_OPTIONS"
-
-    # MacOS needs the latest version of SDL_mixer: older versions have 
-    # compile problems
-
-    SDL_MIXER_VERSION=1.2.11
 else
     LDFLAGS="-Wl,-rpath -Wl,$INSTALL_DIR/lib $LDFLAGS"
-    SDL_MIXER_VERSION=1.2.6
 fi
 
 SDL_CFLAGS=
@@ -299,7 +293,7 @@ if ! check_header SDL_mixer.h; then
 
     # SDL_mixer not installed; we must build it
 
-    fetch_and_build_module http://www.libsdl.org/projects/SDL_mixer/release/ SDL_mixer $SDL_MIXER_VERSION ""
+    fetch_and_build_module http://www.libsdl.org/projects/SDL_mixer/release/ SDL_mixer 1.2.11 ""
 fi
 
 # Build Chocolate Doom.  We can build the stable version or check out
