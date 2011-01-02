@@ -263,6 +263,8 @@ SDL_BUILD_OPTIONS=""
 
 if [ `uname` = "Darwin" ]; then
     SDL_BUILD_OPTIONS="--disable-video-x11 $SDL_BUILD_OPTIONS"
+    CC="gcc -m32"
+    export CC
 else
     LDFLAGS="-Wl,-rpath -Wl,$INSTALL_DIR/lib $LDFLAGS"
 fi
