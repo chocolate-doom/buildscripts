@@ -308,9 +308,9 @@ if $svn_build; then
 
     build_module chocolate-doom-svn ""
 else
-    # Build v1.4.0
+    # Build v1.5.0
 
-    fetch_and_build_module http://mesh.dl.sourceforge.net/project/chocolate-doom/chocolate-doom/1.4.0/ chocolate-doom 1.4.0 ""
+    fetch_and_build_module http://mesh.dl.sourceforge.net/project/chocolate-doom/chocolate-doom/1.5.0/ chocolate-doom 1.5.0 ""
 fi
 
 cd $CHOCOLATE_DOOM_DIR
