@@ -56,8 +56,19 @@ get_url() {
         return
     fi
 
-    echo No tool available to retrieve URLs.  Please install curl or wget. >2
-    exit
+    # Desperate?
+
+    for l in lynx links elinks; do
+        if have_tool $l; then
+            echo "Using $l to download $url..." >&2
+            $l -source $url
+            return
+        fi
+    done
+
+    echo "No tool available to retrieve URLs.  Please install curl or wget." >&2
+
+    exit -1
 }
 
 # Extract a tar.gz file.
@@ -308,9 +319,9 @@ if $svn_build; then
 
     build_module chocolate-doom-svn ""
 else
-    # Build v1.5.0
+    # Build v1.6.0
 
-    fetch_and_build_module http://mesh.dl.sourceforge.net/project/chocolate-doom/chocolate-doom/1.5.0/ chocolate-doom 1.5.0 ""
+    fetch_and_build_module http://mesh.dl.sourceforge.net/project/chocolate-doom/chocolate-doom/1.6.0/ chocolate-doom 1.6.0 ""
 fi
 
 cd $CHOCOLATE_DOOM_DIR
