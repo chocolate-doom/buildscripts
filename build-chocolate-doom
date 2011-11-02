@@ -200,7 +200,7 @@ autogen_module() {
 check_header() {
     headerfile=$1
 
-    echo "#include <$headerfile>" | cpp $SDL_CFLAGS $CFLAGS > /dev/null
+    echo "#include <$headerfile>" | cpp $SDL_CFLAGS $CPPFLAGS > /dev/null
 
     result=$?
 
@@ -214,10 +214,17 @@ check_header() {
 }
 
 usage() {
+    echo
     echo "Usage:"
     echo "$0       : Install into home directory"
     echo "$0 -su   : Install globally onto system using 'su'"
     echo "$0 -sudo : Install globally onto system using 'sudo'"
+    echo
+    echo "Extra options:"
+    echo "-v2          : Build v2-branch instead of trunk"
+    echo "-host <spec> : Cross-compile for the specified target."
+    echo
+
     exit 0
 }
 
@@ -232,9 +239,12 @@ svn_build=false
 INSTALL_DIR=$CHOCOLATE_DOOM_DIR/install
 INSTALL_COMMAND=
 INSTALL_MESSAGE="Installing..."
+SVN_PATH=/trunk/chocolate-doom
+SVN_CO_NAME=chocolate-doom-svn
+HOST_ARG=
 
 for arg in "$@"; do
-    case "$1" in
+    case "$arg" in
         "-su")
             INSTALL_DIR=/usr/local
             INSTALL_COMMAND=su -c 
@@ -245,9 +255,16 @@ for arg in "$@"; do
             INSTALL_COMMAND=sudo 
             INSTALL_MESSAGE="Type your password:"
             ;;
-        
+        -host=*)
+            HOST_ARG="-$arg"
+            ;;
         "-svn")
             svn_build=true
+            ;;
+        "-v2")
+            svn_build=true
+            SVN_PATH=/branches/v2-branch
+            SVN_CO_NAME=v2-branch-svn
             ;;
         *)
             usage
@@ -263,11 +280,11 @@ mkdir $BUILD_DIR
 
 MACOSX_DEPLOYMENT_TARGET=10.4
 PATH="$INSTALL_DIR/bin:$PATH"
-CFLAGS="-I$INSTALL_DIR/include/SDL $CFLAGS"
+CPPFLAGS="-I$INSTALL_DIR/include -I$INSTALL_DIR/include/SDL"
 LDFLAGS="-L$INSTALL_DIR/lib $LDFLAGS"
 
 export MACOSX_DEPLOYMENT_TARGET
-export CFLAGS
+export CPPFLAGS
 export LDFLAGS
 
 SDL_BUILD_OPTIONS=""
@@ -278,6 +295,25 @@ if [ `uname` = "Darwin" ]; then
     export CC
 else
     LDFLAGS="-Wl,-rpath -Wl,$INSTALL_DIR/lib $LDFLAGS"
+fi
+
+# Windows build?
+
+echo $HOST_ARG
+if [ `uname` = "Cygwin" ] || (echo "$HOST_ARG" | grep -q mingw); then
+
+    echo
+    echo "Windows build: installing supplementary DirectX headers."
+    echo
+
+    if [ ! -e $PACKAGES_DIR/directx-devel.tar.gz ]; then
+        download_file http://www.libsdl.org/extras/win32/common/ \
+                      directx-devel.tar.gz
+    fi
+
+    mkdir -p $INSTALL_DIR
+    cd $INSTALL_DIR
+    extract_targz $PACKAGES_DIR/directx-devel.tar.gz
 fi
 
 SDL_CFLAGS=
@@ -292,36 +328,41 @@ else
 
     SDL_PREFIX=$INSTALL_DIR
 
-    fetch_and_build_module http://www.libsdl.org/release/ SDL 1.2.14 "$SDL_BUILD_OPTIONS"
+    fetch_and_build_module http://www.libsdl.org/release/ SDL 1.2.14 \
+                           "$SDL_BUILD_OPTIONS $HOST_ARG"
 fi
 
 if ! check_header SDL_net.h; then
 
     # SDL_net not installed; we must build it
 
-    fetch_and_build_module http://www.libsdl.org/projects/SDL_net/release/ SDL_net 1.2.6 ""
+    fetch_and_build_module http://www.libsdl.org/projects/SDL_net/release/ \
+                           SDL_net 1.2.6 "$HOST_ARG"
 fi
 
 if ! check_header SDL_mixer.h; then
 
     # SDL_mixer not installed; we must build it
 
-    fetch_and_build_module http://www.libsdl.org/projects/SDL_mixer/release/ SDL_mixer 1.2.11 ""
+    fetch_and_build_module http://www.libsdl.org/projects/SDL_mixer/release/ \
+                           SDL_mixer 1.2.11 "$HOST_ARG"
 fi
 
 # Build Chocolate Doom.  We can build the stable version or check out
 # the latest code from Subversion.
 
 if $svn_build; then
-    fetch_from_svn http://chocolate-doom.svn.sourceforge.net/svnroot/chocolate-doom/trunk/chocolate-doom chocolate-doom-svn
+    fetch_from_svn "http://chocolate-doom.svn.sourceforge.net/svnroot/chocolate-doom$SVN_PATH" \
+                   "$SVN_CO_NAME"
 
-    autogen_module chocolate-doom-svn
+    autogen_module "$SVN_CO_NAME"
 
-    build_module chocolate-doom-svn ""
+    build_module "$SVN_CO_NAME" "$HOST_ARG"
 else
     # Build v1.6.0
 
-    fetch_and_build_module http://mesh.dl.sourceforge.net/project/chocolate-doom/chocolate-doom/1.6.0/ chocolate-doom 1.6.0 ""
+    fetch_and_build_module http://mesh.dl.sourceforge.net/project/chocolate-doom/chocolate-doom/1.6.0/ \
+                           chocolate-doom 1.6.0 "$HOST_ARG"
 fi
 
 cd $CHOCOLATE_DOOM_DIR
