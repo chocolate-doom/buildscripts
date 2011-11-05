@@ -212,7 +212,7 @@ autogen_module() {
 # Check if a given header file is in the standard include directory or
 # SDL include directory.
 
-check_header() {
+have_header() {
     headerfile=$1
 
     echo "#include <$headerfile>" | cpp $SDL_CFLAGS $CPPFLAGS > /dev/null
@@ -236,8 +236,9 @@ usage() {
     echo "$0 -sudo : Install globally onto system using 'sudo'"
     echo
     echo "Extra options:"
-    echo "-v2          : Build v2-branch instead of trunk"
-    echo "-host <spec> : Cross-compile for the specified target."
+    echo "-v2            : Build v2-branch instead of trunk"
+    echo "-libsamplerate : Build libsamplerate"
+    echo "-host <spec>   : Cross-compile for the specified target."
     echo
 
     exit 0
@@ -268,6 +269,7 @@ fi
 
 svn_build=false
 force_build_sdl=false
+build_libsamplerate=false
 
 INSTALL_DIR=$CHOCOLATE_DOOM_DIR/install
 INSTALL_COMMAND=
@@ -292,6 +294,9 @@ for arg in "$@"; do
             HOST_ARG="-$arg"
 	    # Build libraries from scratch when cross compiling:
 	    force_build_sdl=true
+            ;;
+        "-libsamplerate")
+            build_libsamplerate=true
             ;;
         "-svn")
             svn_build=true
@@ -334,7 +339,6 @@ fi
 
 # Windows build?
 
-echo $HOST_ARG
 if [ `uname` = "Cygwin" ] || pattern_match "*mingw*" "$HOST_ARG"; then
 
     echo
@@ -367,7 +371,7 @@ else
                            "$SDL_BUILD_OPTIONS $HOST_ARG"
 fi
 
-if $force_build_sdl || ! check_header SDL_net.h; then
+if $force_build_sdl || ! have_header SDL_net.h; then
 
     # SDL_net not installed; we must build it
 
@@ -375,7 +379,7 @@ if $force_build_sdl || ! check_header SDL_net.h; then
                            SDL_net 1.2.6 "$HOST_ARG"
 fi
 
-if $force_build_sdl || ! check_header SDL_mixer.h; then
+if $force_build_sdl || ! have_header SDL_mixer.h; then
 
     # SDL_mixer not installed; we must build it
     # Disable dependencies on external libraries for sound file formats:
@@ -385,6 +389,15 @@ if $force_build_sdl || ! check_header SDL_mixer.h; then
 
     fetch_and_build_module http://www.libsdl.org/projects/SDL_mixer/release/ \
                            SDL_mixer 1.2.11 "$HOST_ARG $mixer_opts"
+fi
+
+# Optional libsamplerate support:
+
+if $build_libsamplerate
+    if $force_build_sdl || ! have_header libsamplerate.h; then
+        fetch_and_build_module http://www.mega-nerd.com/SRC/ \
+                               libsamplerate 0.1.8 "$HOST_ARG"
+    fi
 fi
 
 # Build Chocolate Doom.  We can build the stable version or check out
