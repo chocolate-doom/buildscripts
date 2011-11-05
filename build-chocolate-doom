@@ -264,9 +264,11 @@ if ! have_tool gcc; then
     exit -1
 fi
 
-# Decide on how to install things
+# Parse command line arguments:
 
 svn_build=false
+force_build_sdl=false
+
 INSTALL_DIR=$CHOCOLATE_DOOM_DIR/install
 INSTALL_COMMAND=
 INSTALL_MESSAGE="Installing..."
@@ -288,6 +290,8 @@ for arg in "$@"; do
             ;;
         -host=*)
             HOST_ARG="-$arg"
+	    # Build libraries from scratch when cross compiling:
+	    force_build_sdl=true
             ;;
         "-svn")
             svn_build=true
@@ -350,7 +354,7 @@ fi
 SDL_CFLAGS=
 SDL_PREFIX=`sdl-config --prefix`
 
-if [ $? = 0 ]; then
+if [ $? = 0 ] && ! $force_build_sdl; then
     # SDL is installed on the system
 
     SDL_CFLAGS=`sdl-config --cflags`
@@ -363,7 +367,7 @@ else
                            "$SDL_BUILD_OPTIONS $HOST_ARG"
 fi
 
-if ! check_header SDL_net.h; then
+if $force_build_sdl || ! check_header SDL_net.h; then
 
     # SDL_net not installed; we must build it
 
@@ -371,12 +375,16 @@ if ! check_header SDL_net.h; then
                            SDL_net 1.2.6 "$HOST_ARG"
 fi
 
-if ! check_header SDL_mixer.h; then
+if $force_build_sdl || ! check_header SDL_mixer.h; then
 
     # SDL_mixer not installed; we must build it
+    # Disable dependencies on external libraries for sound file formats:
+
+    mixer_opts="--disable-music-mod --disable-music-ogg \
+                --disable-music-flac --disable-music-mp3"
 
     fetch_and_build_module http://www.libsdl.org/projects/SDL_mixer/release/ \
-                           SDL_mixer 1.2.11 "$HOST_ARG"
+                           SDL_mixer 1.2.11 "$HOST_ARG $mixer_opts"
 fi
 
 # Build Chocolate Doom.  We can build the stable version or check out
