@@ -19,6 +19,21 @@ CHOCOLATE_DOOM_DIR=~/chocolate-doom
 PACKAGES_DIR=$CHOCOLATE_DOOM_DIR/packages
 BUILD_DIR=$CHOCOLATE_DOOM_DIR/build
 
+# Check if the specified string matches the glob pattern.
+
+pattern_match() {
+    pattern="$1"
+
+    case "$2" in
+        $pattern)
+            true
+            ;;
+        *)
+            false
+            ;;
+    esac
+}
+
 # Determine if a given program is in the PATH.
 
 have_tool() {
@@ -228,6 +243,22 @@ usage() {
     exit 0
 }
 
+if pattern_match "* *" "$HOME"; then
+    echo
+    echo "The path to your home directory contains a space:"
+    echo
+    echo "    HOME=$HOME"
+    echo
+    echo "This script will probably fail to build - reset HOME to point"
+    echo "somewhere else. For example, type:"
+    echo
+    echo "    mkdir /home/user"
+    echo "    HOME=/home/user"
+    echo
+
+    exit -1
+fi
+
 if ! have_tool gcc; then
     echo "No compiler found.  Please install gcc!" >&2
     exit -1
@@ -300,7 +331,7 @@ fi
 # Windows build?
 
 echo $HOST_ARG
-if [ `uname` = "Cygwin" ] || (echo "$HOST_ARG" | grep -q mingw); then
+if [ `uname` = "Cygwin" ] || pattern_match "*mingw*" "$HOST_ARG"; then
 
     echo
     echo "Windows build: installing supplementary DirectX headers."
