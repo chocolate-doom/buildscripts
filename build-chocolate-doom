@@ -393,7 +393,7 @@ fi
 
 # Optional libsamplerate support:
 
-if $build_libsamplerate
+if $build_libsamplerate; then
     if $force_build_sdl || ! have_header libsamplerate.h; then
         fetch_and_build_module http://www.mega-nerd.com/SRC/ \
                                libsamplerate 0.1.8 "$HOST_ARG"
