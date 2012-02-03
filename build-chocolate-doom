@@ -367,7 +367,7 @@ else
 
     SDL_PREFIX=$INSTALL_DIR
 
-    fetch_and_build_module http://www.libsdl.org/release/ SDL 1.2.14 \
+    fetch_and_build_module http://www.libsdl.org/release/ SDL 1.2.15 \
                            "$SDL_BUILD_OPTIONS $HOST_ARG"
 fi
 
@@ -388,7 +388,7 @@ if $force_build_sdl || ! have_header SDL_mixer.h; then
                 --disable-music-flac --disable-music-mp3"
 
     fetch_and_build_module http://www.libsdl.org/projects/SDL_mixer/release/ \
-                           SDL_mixer 1.2.11 "$HOST_ARG $mixer_opts"
+                           SDL_mixer 1.2.12 "$HOST_ARG $mixer_opts"
 fi
 
 # Optional libsamplerate support:
