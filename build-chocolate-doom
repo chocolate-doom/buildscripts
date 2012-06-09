@@ -411,10 +411,10 @@ if $svn_build; then
 
     build_module "$SVN_CO_NAME" "$HOST_ARG"
 else
-    # Build v1.6.0
+    # Build v1.7.0
 
-    fetch_and_build_module http://mesh.dl.sourceforge.net/project/chocolate-doom/chocolate-doom/1.6.0/ \
-                           chocolate-doom 1.6.0 "$HOST_ARG"
+    fetch_and_build_module http://downloads.sourceforge.net/project/chocolate-doom/chocolate-doom/1.7.0/ \
+                           chocolate-doom 1.7.0 "$HOST_ARG"
 fi
 
 cd $CHOCOLATE_DOOM_DIR
