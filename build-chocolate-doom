@@ -175,6 +175,11 @@ build_module() {
     echo $INSTALL_MESSAGE
     $INSTALL_COMMAND make install || exit
 
+    # Remove any libtool .la files that were installed by the build - they
+    # aren't needed and can cause build problems with dependency ordering
+    # when cross-compiling to MingW.
+    rm -f $INSTALL_DIR/lib/*.la
+
     echo Build complete.
     echo 
 }
