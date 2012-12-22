@@ -338,6 +338,7 @@ if [ `uname` = "Darwin" ]; then
     SDL_BUILD_OPTIONS="--disable-video-x11 $SDL_BUILD_OPTIONS"
     CC="gcc -m32"
     export CC
+    LDFLAGS="-lobjc $LDFLAGS"
 else
     LDFLAGS="-Wl,-rpath -Wl,$INSTALL_DIR/lib $LDFLAGS"
 fi
@@ -381,7 +382,7 @@ if $force_build_sdl || ! have_header SDL_net.h; then
     # SDL_net not installed; we must build it
 
     fetch_and_build_module http://www.libsdl.org/projects/SDL_net/release/ \
-                           SDL_net 1.2.6 "$HOST_ARG"
+                           SDL_net 1.2.8 "$HOST_ARG"
 fi
 
 if $force_build_sdl || ! have_header SDL_mixer.h; then
@@ -418,7 +419,7 @@ if $svn_build; then
 else
     # Build v1.7.0
 
-    fetch_and_build_module http://downloads.sourceforge.net/project/chocolate-doom/chocolate-doom/1.7.0/ \
+    fetch_and_build_module http://ignum.dl.sourceforge.net/project/chocolate-doom/chocolate-doom/1.7.0/ \
                            chocolate-doom 1.7.0 "$HOST_ARG"
 fi
 
