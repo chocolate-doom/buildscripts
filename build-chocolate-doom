@@ -382,7 +382,7 @@ if $force_build_sdl || ! have_header SDL_net.h; then
     # SDL_net not installed; we must build it
 
     fetch_and_build_module http://www.libsdl.org/projects/SDL_net/release/ \
-                           SDL_net 1.2.8 "$HOST_ARG"
+                           SDL_net 1.2.7 "$HOST_ARG"
 fi
 
 if $force_build_sdl || ! have_header SDL_mixer.h; then
