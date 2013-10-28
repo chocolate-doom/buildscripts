@@ -410,8 +410,8 @@ fi
 # the latest code from Subversion.
 
 if $svn_build; then
-    fetch_from_svn "http://chocolate-doom.svn.sourceforge.net/svnroot/chocolate-doom$SVN_PATH" \
-                   "$SVN_CO_NAME"
+    SVN_ROOT=svn://svn.code.sf.net/p/chocolate-doom/code
+    fetch_from_svn "$SVN_ROOT$SVN_PATH" "$SVN_CO_NAME"
 
     autogen_module "$SVN_CO_NAME"
 
