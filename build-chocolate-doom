@@ -109,23 +109,25 @@ download_file() {
     fi
 }
 
-# fetch_from_svn(svn_url, checkout_dir_name)
-# Check module out from subversion.
+# fetch_from_git(git_url, checkout_dir_name)
+# Check module out from Git.
 
-fetch_from_svn() {
-    svn_url=$1
+fetch_from_git() {
+    git_url=$1
     checkout_dir_name=$2
 
     checkout_path="$BUILD_DIR/$checkout_dir_name"
 
     if [ ! -e "$checkout_path" ]; then
 
-        if ! svn checkout "$svn_url" "$checkout_path"; then
-            echo "Failed to check out $checkout_dir_name from Subversion"
+        if ! git clone "$git_url" "$checkout_path"; then
+            echo "Failed to check out $checkout_dir_name from Git"
             exit
         fi
     else
-        svn update "$checkout_path"
+	pushd "$checkout_path"
+        git pull
+	popd
     fi
 }
 
@@ -241,7 +243,7 @@ usage() {
     echo "$0 -sudo : Install globally onto system using 'sudo'"
     echo
     echo "Extra options:"
-    echo "-v2            : Build v2-branch instead of trunk"
+    echo "-git           : Build latest version from Git HEAD."
     echo "-libsamplerate : Build libsamplerate"
     echo "-host <spec>   : Cross-compile for the specified target."
     echo
@@ -272,15 +274,14 @@ fi
 
 # Parse command line arguments:
 
-svn_build=false
+git_build=false
 force_build_sdl=false
 build_libsamplerate=false
 
 INSTALL_DIR=$CHOCOLATE_DOOM_DIR/install
 INSTALL_COMMAND=
 INSTALL_MESSAGE="Installing..."
-SVN_PATH=/trunk/chocolate-doom
-SVN_CO_NAME=chocolate-doom-svn
+GIT_CO_NAME=chocolate-doom-git
 HOST_ARG=
 
 for arg in "$@"; do
@@ -303,13 +304,8 @@ for arg in "$@"; do
         "-libsamplerate")
             build_libsamplerate=true
             ;;
-        "-svn")
-            svn_build=true
-            ;;
-        "-v2")
-            svn_build=true
-            SVN_PATH=/branches/v2-branch
-            SVN_CO_NAME=v2-branch-svn
+        "-git")
+            git_build=true
             ;;
         *)
             usage
@@ -407,24 +403,22 @@ if $build_libsamplerate; then
 fi
 
 # Build Chocolate Doom.  We can build the stable version or check out
-# the latest code from Subversion.
+# the latest code from Git.
 
-if $svn_build; then
-    SVN_ROOT=svn://svn.code.sf.net/p/chocolate-doom/code
-    fetch_from_svn "$SVN_ROOT$SVN_PATH" "$SVN_CO_NAME"
+if $git_build; then
+    GIT_URL=https://github.com/fragglet/chocolate-doom.git
+    fetch_from_git "$GIT_URL" "$GIT_CO_NAME"
 
-    autogen_module "$SVN_CO_NAME"
+    autogen_module "$GIT_CO_NAME"
 
-    build_module "$SVN_CO_NAME" "$HOST_ARG"
+    build_module "$GIT_CO_NAME" "$HOST_ARG"
 else
-    # Build v1.7.0
+    # Download and build latest release. We have to download from
+    # insecure.soulsphere.org because current(ish) versions of wget
+    # (and maybe curl?) don't support the SSL SNI extension.
 
-    fetch_and_build_module http://ignum.dl.sourceforge.net/project/chocolate-doom/chocolate-doom/1.7.0/ \
-                           chocolate-doom 1.7.0 "$HOST_ARG"
+    fetch_and_build_module \
+        http://insecure.soulsphere.org/projects/chocolate-doom/2.0.0/ \
+        chocolate-doom 2.0.0 "$HOST_ARG"
 fi
-
-cd $CHOCOLATE_DOOM_DIR
-ln -sf $INSTALL_DIR/games/chocolate-doom chocolate-doom
-ln -sf $INSTALL_DIR/games/chocolate-server chocolate-server
-ln -sf $INSTALL_DIR/games/chocolate-setup chocolate-setup
 
