@@ -244,8 +244,9 @@ usage() {
     echo
     echo "Extra options:"
     echo "-git           : Build latest version from Git HEAD."
-    echo "-libsamplerate : Build libsamplerate"
-    echo "-host <spec>   : Cross-compile for the specified target."
+    echo "-extra-libs    : Build extra optional libraries that can make"
+    echo "                 Chocolate Doom even more awesome."
+    echo "-host=<spec>   : Cross-compile for the specified target."
     echo
 
     exit 0
