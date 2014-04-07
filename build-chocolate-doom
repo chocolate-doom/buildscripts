@@ -125,9 +125,9 @@ fetch_from_git() {
             exit
         fi
     else
-	pushd "$checkout_path"
+        pushd "$checkout_path"
         git pull
-	popd
+        popd
     fi
 }
 
@@ -277,6 +277,9 @@ fi
 git_build=false
 force_build_sdl=false
 build_libsamplerate=false
+build_libflac=false
+build_libvorbis=false
+build_libpng=false
 
 INSTALL_DIR=$CHOCOLATE_DOOM_DIR/install
 INSTALL_COMMAND=
@@ -298,11 +301,14 @@ for arg in "$@"; do
             ;;
         -host=*)
             HOST_ARG="-$arg"
-	    # Build libraries from scratch when cross compiling:
-	    force_build_sdl=true
+            # Build libraries from scratch when cross compiling:
+            force_build_sdl=true
             ;;
-        "-libsamplerate")
+        "-extra-libs")
             build_libsamplerate=true
+            build_libpng=true
+            build_libflac=true
+            build_libvorbis=true
             ;;
         "-git")
             git_build=true
@@ -334,6 +340,8 @@ if [ `uname` = "Darwin" ]; then
     SDL_BUILD_OPTIONS="--disable-video-x11 $SDL_BUILD_OPTIONS"
     CC="gcc -m32"
     export CC
+    CXX="g++ -m32"
+    export CXX
     LDFLAGS="-lobjc $LDFLAGS"
 else
     LDFLAGS="-Wl,-rpath -Wl,$INSTALL_DIR/lib $LDFLAGS"
@@ -373,6 +381,40 @@ else
                            "$SDL_BUILD_OPTIONS $HOST_ARG"
 fi
 
+# Optional libraries first:
+
+if $build_libsamplerate; then
+    if $force_build_sdl || ! have_header samplerate.h; then
+        fetch_and_build_module http://www.chocolate-doom.org/depends/ \
+                               libsamplerate 0.1.8 "$HOST_ARG"
+    fi
+fi
+
+if $build_libpng; then
+    if $force_build_sdl || ! have_header png.h; then
+        fetch_and_build_module http://www.chocolate-doom.org/depends/ \
+                               libpng 1.6.10 "$HOST_ARG"
+    fi
+fi
+
+if $build_libvorbis; then
+    if $force_build_sdl || ! have_header vorbis/vorbisfile.h; then
+        fetch_and_build_module http://www.chocolate-doom.org/depends/ \
+                               libogg 1.3.1 "$HOST_ARG"
+        fetch_and_build_module http://www.chocolate-doom.org/depends/ \
+                               libvorbis 1.3.4 "$HOST_ARG"
+    fi
+fi
+
+if $build_libflac; then
+    if $force_build_sdl || ! have_header FLAC/stream_decoder.h; then
+        flac_opts="--disable-asm-optimizations"  # Causes problems
+
+        fetch_and_build_module http://www.chocolate-doom.org/depends/ \
+                               flac 1.2.1 "$HOST_ARG $flac_opts"
+    fi
+fi
+
 if $force_build_sdl || ! have_header SDL_net.h; then
 
     # SDL_net not installed; we must build it
@@ -385,21 +427,19 @@ if $force_build_sdl || ! have_header SDL_mixer.h; then
 
     # SDL_mixer not installed; we must build it
     # Disable dependencies on external libraries for sound file formats:
+    mixer_opts="--disable-music-mod --disable-music-mp3 \
+                --disable-music-flac-shared --disable-music-ogg-shared"
 
-    mixer_opts="--disable-music-mod --disable-music-ogg \
-                --disable-music-flac --disable-music-mp3"
+    # ...except ones we're building.
+    if ! $build_libflac; then
+        mixer_opts="$mixer_opts --disable-music-flac"
+    fi
+    if ! $build_libvorbis; then
+        mixer_opts="$mixer_opts --disable-music-ogg"
+    fi
 
     fetch_and_build_module http://www.libsdl.org/projects/SDL_mixer/release/ \
                            SDL_mixer 1.2.12 "$HOST_ARG $mixer_opts"
-fi
-
-# Optional libsamplerate support:
-
-if $build_libsamplerate; then
-    if $force_build_sdl || ! have_header libsamplerate.h; then
-        fetch_and_build_module http://www.mega-nerd.com/SRC/ \
-                               libsamplerate 0.1.8 "$HOST_ARG"
-    fi
 fi
 
 # Build Chocolate Doom.  We can build the stable version or check out
