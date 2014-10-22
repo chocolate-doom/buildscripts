@@ -454,12 +454,9 @@ if $git_build; then
 
     build_module "$GIT_CO_NAME" "$HOST_ARG"
 else
-    # Download and build latest release. We have to download from
-    # insecure.soulsphere.org because current(ish) versions of wget
-    # (and maybe curl?) don't support the SSL SNI extension.
-
+    # Download and build latest release.
     fetch_and_build_module \
-        http://insecure.soulsphere.org/projects/chocolate-doom/2.0.0/ \
-        chocolate-doom 2.0.0 "$HOST_ARG"
+        http://www.chocolate-doom.org/downloads/2.1.0/ \
+        chocolate-doom 2.1.0 "$HOST_ARG"
 fi
 
