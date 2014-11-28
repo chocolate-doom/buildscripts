@@ -1,0 +1,468 @@
+#!/bin/sh
+#
+# Build script to automatically build Chocolate Doom.  This will work
+# on OSX and Linux, and hopefully Cygwin as well (havent tried)
+#
+# To build on OSX:
+#  1. Install Xcode (available on your OSX DVDs or from the Apple
+#     website)
+#  2. Type:
+#       curl http://www.chocolate-doom.org/build-chocolate-doom | sh
+#
+# To build on Linux:
+#  1. Make sure gcc is installed (depends on your distribution).
+#  2. Type:
+#       wget -O - http://www.chocolate-doom.org/build-chocolate-doom | sh
+#
+
+CHOCOLATE_DOOM_DIR=~/chocolate-doom-sdl2
+PACKAGES_DIR=$CHOCOLATE_DOOM_DIR/packages
+BUILD_DIR=$CHOCOLATE_DOOM_DIR/build
+
+# Check if the specified string matches the glob pattern.
+
+pattern_match() {
+    pattern="$1"
+
+    case "$2" in
+        $pattern)
+            true
+            ;;
+        *)
+            false
+            ;;
+    esac
+}
+
+# Determine if a given program is in the PATH.
+
+have_tool() {
+    tool=$1
+
+    result=1
+    SAVE_IFS=$IFS
+    IFS=:
+
+    for dir in $PATH; do
+        if [ -e $dir/$tool ]; then
+#            echo $dir/$tool
+            result=0
+            break
+        fi
+    done
+
+    IFS=$SAVE_IFS
+
+    return $result
+}
+
+# Download a given URL to stdout.
+
+get_url() {
+    url=$1
+
+    if have_tool curl; then
+        curl $url
+        return
+    fi
+
+    if have_tool wget; then
+        wget $url -O -
+        return
+    fi
+
+    # Desperate?
+
+    for l in lynx links elinks; do
+        if have_tool $l; then
+            echo "Using $l to download $url..." >&2
+            $l -source $url
+            return
+        fi
+    done
+
+    echo "No tool available to retrieve URLs.  Please install curl or wget." >&2
+
+    exit -1
+}
+
+# Extract a tar.gz file.
+
+extract_targz() {
+    file=$1
+
+    gunzip < $1 | tar -x
+}
+
+# Download a file to the packages directory.
+
+download_file() {
+    url=$1
+    file=$2
+
+    if get_url $url$file > $PACKAGES_DIR/$file.part; then
+        mv $PACKAGES_DIR/$file.part $PACKAGES_DIR/$file
+        return 0
+    else
+        echo "File $file failed to download! Please try again."
+        return 1
+    fi
+}
+
+# fetch_from_git(git_url, checkout_dir_name)
+# Check module out from Git.
+
+fetch_from_git() {
+    git_url=$1
+    checkout_dir_name=$2
+
+    checkout_path="$BUILD_DIR/$checkout_dir_name"
+
+    if [ ! -e "$checkout_path" ]; then
+
+        if ! git clone "$git_url" "$checkout_path"; then
+            echo "Failed to check out $checkout_dir_name from Git"
+            exit
+        fi
+
+	# We want to build the SDL2 branch rather than master.
+	pushd "$checkout_path"
+	git checkout sdl2-branch
+	popd
+    else
+        pushd "$checkout_path"
+        git pull
+        popd
+    fi
+}
+
+# fetch_module(base_url, module_name, version)
+# Download the specified module.
+
+fetch_module() {
+    url=$1
+    module=$2
+    version=$3
+
+    echo =======================================================
+    echo Building $module version $version
+    echo =======================================================
+    echo
+
+    if [ ! -e $PACKAGES_DIR/$module-$version.tar.gz ]; then
+        echo Downloading tar file...
+        download_file $url $module-$version.tar.gz
+    fi
+
+    echo Extracting...
+    cd $BUILD_DIR
+
+    if ! extract_targz $PACKAGES_DIR/$module-$version.tar.gz; then
+        rm -f $PACKAGES_DIR/$module-$version.tar.gz
+
+        echo Archive failed to extract and is possibly corrupted.
+        echo Please run this script again.
+        exit
+    fi
+}
+
+# build_module(module_dir, args)
+# Build the specified module.
+
+build_module() {
+    module=$1
+    args=$2
+
+    echo Building module...
+    cd "$BUILD_DIR/$module"
+    (./configure --with-sdl-prefix=$SDL_PREFIX --prefix=$INSTALL_DIR $args) || exit
+    make || exit
+
+    # Install the package
+    echo $INSTALL_MESSAGE
+    $INSTALL_COMMAND make install || exit
+
+    # Remove any libtool .la files that were installed by the build - they
+    # aren't needed and can cause build problems with dependency ordering
+    # when cross-compiling to MingW.
+    rm -f $INSTALL_DIR/lib/*.la
+
+    echo Build complete.
+    echo 
+}
+
+# fetch_and_build_module(base_url, module_name, version, args)
+# Build a module, downloading from http:
+
+fetch_and_build_module() {
+    url=$1
+    module=$2
+    version=$3
+    args=$4
+
+    fetch_module "$url" "$module" "$version"
+    build_module "$module-$version" "$args"
+}
+
+autogen_module() {
+    module=$1
+
+    cd "$BUILD_DIR/$module"
+
+    # This is what is normally found in the autogen.sh script.  The
+    # commands are run here directly as some slight tweaks are needed.
+
+    mkdir autotools
+
+    aclocal -I "$SDL_PREFIX/share/aclocal" || exit
+    autoheader || exit
+    automake -a -c || exit
+    autoconf || exit
+    automake || exit
+}
+
+# Check if a given header file is in the standard include directory or
+# SDL include directory.
+
+have_header() {
+    headerfile=$1
+
+    echo "#include <$headerfile>" | cpp $SDL_CFLAGS $CPPFLAGS > /dev/null
+
+    result=$?
+
+    if [ $result = 0 ]; then
+        echo "Have $headerfile"
+    else
+        echo "Don't have $headerfile"
+    fi
+    
+    return $result
+}
+
+usage() {
+    echo
+    echo "Usage:"
+    echo "$0       : Install into home directory"
+    echo "$0 -su   : Install globally onto system using 'su'"
+    echo "$0 -sudo : Install globally onto system using 'sudo'"
+    echo
+    echo "Extra options:"
+    echo "-git           : Build latest version from Git HEAD."
+    echo "-extra-libs    : Build extra optional libraries that can make"
+    echo "                 Chocolate Doom even more awesome."
+    echo "-host=<spec>   : Cross-compile for the specified target."
+    echo
+
+    exit 0
+}
+
+if pattern_match "* *" "$HOME"; then
+    echo
+    echo "The path to your home directory contains a space:"
+    echo
+    echo "    HOME=$HOME"
+    echo
+    echo "This script will probably fail to build - reset HOME to point"
+    echo "somewhere else. For example, type:"
+    echo
+    echo "    mkdir /home/user"
+    echo "    HOME=/home/user"
+    echo
+
+    exit -1
+fi
+
+if ! have_tool gcc; then
+    echo "No compiler found.  Please install gcc!" >&2
+    exit -1
+fi
+
+# Parse command line arguments:
+
+#git_build=false
+git_build=true
+force_build_sdl=false
+build_libsamplerate=false
+build_libflac=false
+build_libvorbis=false
+build_libpng=false
+
+INSTALL_DIR=$CHOCOLATE_DOOM_DIR/install
+INSTALL_COMMAND=
+INSTALL_MESSAGE="Installing..."
+GIT_CO_NAME=chocolate-doom-git
+HOST_ARG=
+
+for arg in "$@"; do
+    case "$arg" in
+        "-su")
+            INSTALL_DIR=/usr/local
+            INSTALL_COMMAND=su -c 
+            INSTALL_MESSAGE="Type the root password:"
+            ;;
+        "-sudo")
+            INSTALL_DIR=/usr/local
+            INSTALL_COMMAND=sudo 
+            INSTALL_MESSAGE="Type your password:"
+            ;;
+        -host=*)
+            HOST_ARG="-$arg"
+            # Build libraries from scratch when cross compiling:
+            force_build_sdl=true
+            ;;
+        "-extra-libs")
+            build_libsamplerate=true
+            build_libpng=true
+            build_libflac=true
+            build_libvorbis=true
+            ;;
+        "-git")
+            git_build=true
+            ;;
+        *)
+            usage
+            ;;
+    esac
+done
+
+# Make all our build directories etc
+
+mkdir $CHOCOLATE_DOOM_DIR
+mkdir $PACKAGES_DIR
+mkdir $BUILD_DIR
+
+MACOSX_DEPLOYMENT_TARGET=10.5
+PATH="$INSTALL_DIR/bin:$PATH"
+CPPFLAGS="-I$INSTALL_DIR/include -I$INSTALL_DIR/include/SDL"
+LDFLAGS="-L$INSTALL_DIR/lib $LDFLAGS"
+
+export MACOSX_DEPLOYMENT_TARGET
+export CPPFLAGS
+export LDFLAGS
+
+SDL_BUILD_OPTIONS=""
+
+if [ `uname` = "Darwin" ]; then
+    SDL_BUILD_OPTIONS="--disable-video-x11 $SDL_BUILD_OPTIONS"
+    CC="gcc -m32"
+    export CC
+    CXX="g++ -m32"
+    export CXX
+    LDFLAGS="-lobjc $LDFLAGS"
+else
+    LDFLAGS="-Wl,-rpath -Wl,$INSTALL_DIR/lib $LDFLAGS"
+fi
+
+# Windows build?
+
+if [ `uname` = "Cygwin" ] || pattern_match "*mingw*" "$HOST_ARG"; then
+
+    echo
+    echo "Windows build: installing supplementary DirectX headers."
+    echo
+
+    if [ ! -e $PACKAGES_DIR/directx-devel.tar.gz ]; then
+        download_file http://www.libsdl.org/extras/win32/common/ \
+                      directx-devel.tar.gz
+    fi
+
+    mkdir -p $INSTALL_DIR
+    cd $INSTALL_DIR
+    extract_targz $PACKAGES_DIR/directx-devel.tar.gz
+fi
+
+SDL_CFLAGS=
+SDL_PREFIX=`sdl-config --prefix`
+
+if [ $? = 0 ] && ! $force_build_sdl; then
+    # SDL is installed on the system
+
+    SDL_CFLAGS=`sdl-config --cflags`
+else
+    # SDL not installed; we must build it
+
+    SDL_PREFIX=$INSTALL_DIR
+
+    fetch_and_build_module http://www.libsdl.org/release/ SDL2 2.0.3 \
+                           "$SDL_BUILD_OPTIONS $HOST_ARG"
+fi
+
+# Optional libraries first:
+
+if $build_libsamplerate; then
+    if $force_build_sdl || ! have_header samplerate.h; then
+        fetch_and_build_module http://www.chocolate-doom.org/depends/ \
+                               libsamplerate 0.1.8 "$HOST_ARG"
+    fi
+fi
+
+if $build_libpng; then
+    if $force_build_sdl || ! have_header png.h; then
+        fetch_and_build_module http://www.chocolate-doom.org/depends/ \
+                               libpng 1.6.10 "$HOST_ARG"
+    fi
+fi
+
+if $build_libvorbis; then
+    if $force_build_sdl || ! have_header vorbis/vorbisfile.h; then
+        fetch_and_build_module http://www.chocolate-doom.org/depends/ \
+                               libogg 1.3.1 "$HOST_ARG"
+        fetch_and_build_module http://www.chocolate-doom.org/depends/ \
+                               libvorbis 1.3.4 "$HOST_ARG"
+    fi
+fi
+
+if $build_libflac; then
+    if $force_build_sdl || ! have_header FLAC/stream_decoder.h; then
+        flac_opts="--disable-asm-optimizations"  # Causes problems
+
+        fetch_and_build_module http://www.chocolate-doom.org/depends/ \
+                               flac 1.2.1 "$HOST_ARG $flac_opts"
+    fi
+fi
+
+if $force_build_sdl || ! have_header SDL_net.h; then
+
+    # SDL_net not installed; we must build it
+
+    fetch_and_build_module http://www.libsdl.org/projects/SDL_net/release/ \
+                           SDL2_net 2.0.0 "$HOST_ARG"
+fi
+
+if $force_build_sdl || ! have_header SDL_mixer.h; then
+
+    # SDL_mixer not installed; we must build it
+    # Disable dependencies on external libraries for sound file formats:
+    mixer_opts="--disable-music-mod --disable-music-mp3 \
+                --disable-music-flac-shared --disable-music-ogg-shared"
+
+    # ...except ones we're building.
+    if ! $build_libflac; then
+        mixer_opts="$mixer_opts --disable-music-flac"
+    fi
+    if ! $build_libvorbis; then
+        mixer_opts="$mixer_opts --disable-music-ogg"
+    fi
+
+    fetch_and_build_module http://www.libsdl.org/projects/SDL_mixer/release/ \
+                           SDL2_mixer 2.0.0 "$HOST_ARG $mixer_opts"
+fi
+
+# Build Chocolate Doom.  We can build the stable version or check out
+# the latest code from Git.
+
+if $git_build; then
+    GIT_URL=https://github.com/fragglet/chocolate-doom.git
+    fetch_from_git "$GIT_URL" "$GIT_CO_NAME"
+
+    autogen_module "$GIT_CO_NAME"
+
+    build_module "$GIT_CO_NAME" "$HOST_ARG"
+else
+    # Download and build latest release.
+    fetch_and_build_module \
+        http://www.chocolate-doom.org/downloads/2.1.0/ \
+        chocolate-doom 2.1.0 "$HOST_ARG"
+fi
+
