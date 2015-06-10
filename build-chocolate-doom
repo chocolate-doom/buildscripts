@@ -456,7 +456,7 @@ if $git_build; then
 else
     # Download and build latest release.
     fetch_and_build_module \
-        http://www.chocolate-doom.org/downloads/2.1.0/ \
-        chocolate-doom 2.1.0 "$HOST_ARG"
+        http://www.chocolate-doom.org/downloads/2.2.0/ \
+        chocolate-doom 2.2.0 "$HOST_ARG"
 fi
 
