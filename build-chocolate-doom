@@ -186,6 +186,35 @@ build_module() {
     echo 
 }
 
+# Apply a patch to the specified module before building.
+apply_patch() {
+    module_and_ver=$1
+    patch_name=$2
+
+    if [ "$module-$version" = "$module_and_ver" ]; then
+        echo "Applying patch: $patch_name"
+        cd "$BUILD_DIR/$module_and_ver"
+        patch -p1 || exit
+    fi
+}
+
+apply_patches() {
+    apply_patch "SDL-1.2.15" "Mac OS X build fix" <<__END__
+--- a/src/video/quartz/SDL_QuartzVideo.h	Thu Sep 05 06:38:57 2013 -0700
++++ b/src/video/quartz/SDL_QuartzVideo.h	Fri Sep 06 23:35:30 2013 -0700
+@@ -91,7 +91,9 @@
+     CGDirectDisplayID  display;            /* 0 == main display (only support single display) */
+     const void         *mode;              /* current mode of the display */
+     const void         *save_mode;         /* original mode of the display */
++#if (MAC_OS_X_VERSION_MIN_REQUIRED < 1070)
+     CGDirectPaletteRef palette;            /* palette of an 8-bit display */
++#endif
+     NSOpenGLContext    *gl_context;        /* OpenGL rendering context */
+     NSGraphicsContext  *nsgfx_context;     /* Cocoa graphics context */
+     Uint32             width, height, bpp; /* frequently used data about the display */
+__END__
+}
+
 # fetch_and_build_module(base_url, module_name, version, args)
 # Build a module, downloading from http:
 
@@ -196,6 +225,7 @@ fetch_and_build_module() {
     args=$4
 
     fetch_module "$url" "$module" "$version"
+    apply_patches
     build_module "$module-$version" "$args"
 }
 
@@ -326,7 +356,7 @@ mkdir $CHOCOLATE_DOOM_DIR
 mkdir $PACKAGES_DIR
 mkdir $BUILD_DIR
 
-MACOSX_DEPLOYMENT_TARGET=10.4
+MACOSX_DEPLOYMENT_TARGET=10.7
 PATH="$INSTALL_DIR/bin:$PATH"
 CPPFLAGS="-I$INSTALL_DIR/include -I$INSTALL_DIR/include/SDL"
 LDFLAGS="-L$INSTALL_DIR/lib $LDFLAGS"
