@@ -170,7 +170,7 @@ build_module() {
 
     echo Building module...
     cd "$BUILD_DIR/$module"
-    (./configure --with-sdl-prefix=$SDL_PREFIX --prefix=$INSTALL_DIR $args) || exit
+    (./configure --prefix=$INSTALL_DIR $args) || exit
     make || exit
 
     # Install the package
@@ -453,14 +453,16 @@ if $force_build_sdl || ! have_header SDL_net.h; then
     # SDL_net not installed; we must build it
 
     fetch_and_build_module http://www.libsdl.org/projects/SDL_net/release/ \
-                           SDL_net 1.2.7 "$HOST_ARG"
+                           SDL_net 1.2.7 \
+                           "--with-sdl-prefix=$SDL_PREFIX $HOST_ARG"
 fi
 
 if $force_build_sdl || ! have_header SDL_mixer.h; then
 
     # SDL_mixer not installed; we must build it
     # Disable dependencies on external libraries for sound file formats:
-    mixer_opts="--disable-music-mod --disable-music-mp3 \
+    mixer_opts="--with-sdl-prefix=$SDL_PREFIX $HOST_ARG \
+                --disable-music-mod --disable-music-mp3 \
                 --disable-music-flac-shared --disable-music-ogg-shared"
 
     # ...except ones we're building.
