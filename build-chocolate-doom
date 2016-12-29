@@ -424,6 +424,21 @@ if $build_libsamplerate; then
 fi
 
 if $build_libpng; then
+    if $force_build_sdl || ! have_header zlib.h; then
+        fetch_module http://www.chocolate-doom.org/depends/ zlib 1.2.8
+        make_prefix=
+        if [ "$HOST_ARG" != "" ]; then
+            make_prefix=${HOST_ARG/--host=/PREFIX=}-
+        fi
+        make -C "$BUILD_DIR/zlib-1.2.8" \
+             -f win32/Makefile.gcc \
+             $make_prefix \
+             install \
+             INCLUDE_PATH=${INSTALL_DIR}/include \
+             LIBRARY_PATH=${INSTALL_DIR}/lib \
+             BINARY_PATH=${INSTALL_DIR}/bin
+    fi
+
     if $force_build_sdl || ! have_header png.h; then
         fetch_and_build_module http://www.chocolate-doom.org/depends/ \
                                libpng 1.6.10 "$HOST_ARG"
