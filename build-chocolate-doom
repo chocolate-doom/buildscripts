@@ -252,7 +252,7 @@ autogen_module() {
 have_header() {
     headerfile=$1
 
-    echo "#include <$headerfile>" | cpp $SDL_CFLAGS $CPPFLAGS > /dev/null
+    echo "#include <$headerfile>" | $CPP $SDL_CFLAGS $CPPFLAGS > /dev/null
 
     result=$?
 
@@ -315,6 +315,7 @@ build_libpng=false
 INSTALL_DIR=$CHOCOLATE_DOOM_DIR/install
 INSTALL_COMMAND=
 INSTALL_MESSAGE="Installing..."
+CPP=cpp
 GIT_CO_NAME=chocolate-doom-git
 HOST_ARG=
 
@@ -332,6 +333,7 @@ for arg in "$@"; do
             ;;
         -host=*)
             HOST_ARG="-$arg"
+            CPP=${arg/-host=/}-cpp
             # Build libraries from scratch when cross compiling:
             force_build_sdl=true
             ;;
